@@ -444,6 +444,8 @@ class Parameter(SwaggerDict):
             # path parameters must always be required
             assert required is not False, "path parameter cannot be optional"
             self.required = True
+        if self['in'] == IN_QUERY and type == TYPE_ARRAY:
+            self.collection_format = 'multi'
         if self['in'] != IN_BODY and schema is not None:
             raise AssertionError("schema can only be applied to a body Parameter, not %s" % type)
         if default and not type:
