@@ -8,7 +8,6 @@ import pkg_resources
 from packaging import version
 from collections import OrderedDict
 from decimal import Decimal
-from inspect import signature as inspect_signature
 
 from django.core import validators
 from django.db import models
@@ -394,7 +393,7 @@ model_field_to_basic_type = [
     (models.TimeField, (openapi.TYPE_STRING, None)),
     (models.UUIDField, (openapi.TYPE_STRING, openapi.FORMAT_UUID)),
     (models.CharField, (openapi.TYPE_STRING, None)),
-]    
+]
 
 ip_format = {'ipv4': openapi.FORMAT_IPV4, 'ipv6': openapi.FORMAT_IPV6}
 
@@ -607,17 +606,19 @@ class SerializerMethodFieldInspector(FieldInspector):
             return self.probe_field_inspectors(serializer, swagger_object_type, use_references, read_only=True)
         else:
             # look for Python 3.5+ style type hinting of the return value
-            hint_class = inspect_signature(method).return_annotation
+            hint_class = typing.get_type_hints(method).get('return')
 
-            if not inspect.isclass(hint_class) and hasattr(hint_class, '__args__'):
-                hint_class = hint_class.__args__[0]
-            if inspect.isclass(hint_class) and not issubclass(hint_class, inspect._empty):
-                type_info = get_basic_type_info_from_hint(hint_class)
+            # annotations such as typing.Optional have an __instancecheck__
+            # hook and will not look like classes, but `issubclass` needs
+            # a class as its first argument, so only in that case abort
+            if inspect.isclass(hint_class) and issubclass(hint_class, inspect._empty):
+                return NotHandled
 
-                if type_info is not None:
-                    SwaggerType, ChildSwaggerType = self._get_partial_types(field, swagger_object_type,
-                                                                            use_references, **kwargs)
-                    return SwaggerType(**type_info)
+            type_info = get_basic_type_info_from_hint(hint_class)
+            if type_info is not None:
+                SwaggerType, ChildSwaggerType = self._get_partial_types(field, swagger_object_type,
+                                                                        use_references, **kwargs)
+                return SwaggerType(**type_info)
 
         return NotHandled
 
