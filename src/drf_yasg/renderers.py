@@ -154,6 +154,9 @@ class SwaggerUIRenderer(_UIRenderer):
             'refetchWithAuth': self.swagger_settings.REFETCH_SCHEMA_WITH_AUTH,
             'refetchOnLogout': self.swagger_settings.REFETCH_SCHEMA_ON_LOGOUT,
             'fetchSchemaWithQuery': self.swagger_settings.FETCH_SCHEMA_WITH_QUERY,
+            'csrfCookie': self.swagger_settings.CSRF_COOKIE_NAME,
+            # remove HTTP_ and convert underscores to dashes
+            'csrfHeader': self.swagger_settings.CSRF_HEADER_NAME[5:].replace('_', '-'),
         }
 
         data = filter_none(data)
