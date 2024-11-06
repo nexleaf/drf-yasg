@@ -88,7 +88,7 @@ class SwaggerDict(OrderedDict):
     def __init__(self, **attrs):
         super(SwaggerDict, self).__init__()
         self._extras__ = attrs
-        if type(self) == SwaggerDict:
+        if type(self) is SwaggerDict:
             self._insert_extras__()
 
     def __setattr__(self, key, value):
@@ -441,6 +441,8 @@ class Parameter(SwaggerDict):
             # path parameters must always be required
             assert required is not False, "path parameter cannot be optional"
             self.required = True
+        if self['in'] == IN_QUERY and type == TYPE_ARRAY:
+            self.collection_format = 'multi'
         if self['in'] != IN_BODY and schema is not None:
             raise AssertionError("schema can only be applied to a body Parameter, not %s" % type)
         if default and not type:
@@ -516,7 +518,7 @@ class _Ref(SwaggerDict):
         :param bool ignore_unresolved: do not throw if the referenced object does not exist
         """
         super(_Ref, self).__init__()
-        assert not type(self) == _Ref, "do not instantiate _Ref directly"
+        assert not type(self) is _Ref, "do not instantiate _Ref directly"
         ref_name = "#/{scope}/{name}".format(scope=scope, name=name)
         if not ignore_unresolved:
             obj = resolver.get(name, scope)
