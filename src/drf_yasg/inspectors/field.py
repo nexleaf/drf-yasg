@@ -2,12 +2,13 @@ import datetime
 import inspect
 import logging
 import operator
+import sys
 import typing
 import uuid
+import warnings
 from collections import OrderedDict
 from contextlib import suppress
 from decimal import Decimal
-from inspect import signature as inspect_signature
 
 from django.core import validators
 from django.db import models
@@ -665,7 +666,7 @@ class SerializerMethodFieldInspector(FieldInspector):
     the swagger_serializer_method decorator.
     """
 
-    def field_to_swagger_object(
+    def field_to_swagger_object(  # noqa: C901
         self, field, swagger_object_type, use_references, **kwargs
     ):
         if not isinstance(field, serializers.SerializerMethodField):
@@ -710,22 +711,43 @@ class SerializerMethodFieldInspector(FieldInspector):
                 serializer, swagger_object_type, use_references, read_only=True
             )
         else:
+            # look for Python 3.5+ style type hinting of the return value
             try:
-                # look for Python 3.5+ style type hinting of the return value
-                hint_class = typing.get_type_hints(method).get("return")
-
+                annotations = typing.get_type_hints(method)
             except NameError:
-                hint_class = inspect_signature(method).return_annotation
+                # try handling forward references with Python 3.12 type parameters
+                # (PEP-695), which are not defined in the module scope and will not
+                # resolve if postponed evaluation of annotations (PEP-563) is enabled.
+                localns = {
+                    t.__name__: t
+                    # include any class or method type parameters
+                    for scope in (field.parent, method)
+                    for t in getattr(scope, "__type_params__", ())
+                }
+                module_name = field.parent.__module__
+                return_annotation = inspect.signature(method).return_annotation
 
-                if hint_class is not None and hint_class != inspect._empty:
-                    SwaggerType, _ = self._get_partial_types(
-                        field, swagger_object_type, use_references, **kwargs
-                    )
+                try:
+                    # bail if there are no type parameters or the module isn't loaded
+                    if not localns or module_name not in sys.modules:
+                        raise
 
-                    return SwaggerType(
-                        type=openapi.TYPE_STRING,
-                        description=f"Return type: {hint_class}",
+                    annotations = typing.get_type_hints(
+                        method, vars(sys.modules[module_name]), localns
                     )
+                except NameError:
+                    warnings.warn(
+                        f"Cannot resolve annotation: {return_annotation!r}; Is this "
+                        "not imported, or only imported in a TYPE_CHECKING block? "
+                        "Use `swagger_serializer_method` to define the return type."
+                    )
+                    return NotHandled
+                except Exception:
+                    return NotHandled
+            except Exception:
+                return NotHandled
+
+            hint_class = annotations.get("return")
 
             # annotations such as typing.Optional have an __instancecheck__
             # hook and will not look like classes, but `issubclass` needs
